@@ -134,6 +134,7 @@ $basePath = "C:\n8n-data"
 
 $folders = @(
     "$basePath\uploads",
+    "$basePath\archives",
     "$basePath\sessions",
     "$basePath\history",
     "$basePath\config",
@@ -678,7 +679,79 @@ Write-Host "응답 시간: $($stopwatch.ElapsedMilliseconds)ms"
 # 목표: 5,000-8,000ms (5-8초)
 ```
 
-### 7.6 체크리스트
+### 7.6 버전 관리 테스트 ⭐ NEW
+
+**Step 1: 첫 번째 업로드**
+```powershell
+# PowerShell
+$url = "http://192.168.1.100:5678/webhook/admin-upload"
+$filePath = "C:\test_policy.pdf"
+
+curl.exe -X POST $url -F "file=@$filePath"
+
+# 예상 응답:
+# {
+#   "doc_id": "doc_1705123456789",
+#   "filename": "test_policy.pdf",
+#   "version": 1,
+#   "is_update": false
+# }
+```
+
+**Step 2: 동일 파일 재업로드 (버전 2)**
+```powershell
+# 같은 파일을 다시 업로드
+curl.exe -X POST $url -F "file=@$filePath"
+
+# 예상 응답:
+# {
+#   "doc_id": "doc_1705234567890",  # 새 doc_id
+#   "filename": "test_policy.pdf",
+#   "version": 2,
+#   "is_update": true,
+#   "previous_version": "doc_1705123456789"
+# }
+```
+
+**Step 3: 버전 확인**
+```powershell
+# uploads 폴더 확인 (활성 버전만)
+Get-ChildItem C:\n8n-data\uploads
+
+# archives 폴더 확인 (이전 버전)
+Get-ChildItem C:\n8n-data\archives
+
+# 출력 예시:
+# uploads\doc_1705234567890\  (v2, 활성)
+# archives\doc_1705123456789_v1\  (v1, 아카이브)
+```
+
+**Step 4: 메타데이터 확인**
+```powershell
+# v2 메타데이터
+Get-Content C:\n8n-data\uploads\doc_1705234567890\metadata.json | ConvertFrom-Json
+
+# 확인 항목:
+# - version: 2
+# - previous_version: "doc_1705123456789"
+# - active: true
+# - version_history: [...]
+```
+
+**Step 5: Qdrant 검색 테스트**
+```powershell
+# 챗봇으로 질문
+$body = @{
+    question = "test_policy에 대해 알려주세요"
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Uri "http://192.168.1.100:5678/webhook/chat" `
+    -Method Post -ContentType "application/json" -Body $body
+
+# 답변에 v2의 내용만 포함되어야 함 (v1 내용은 없음)
+```
+
+### 7.7 체크리스트
 
 설치 완료 확인:
 
@@ -690,6 +763,7 @@ Write-Host "응답 시간: $($stopwatch.ElapsedMilliseconds)ms"
 - [ ] 문서 업로드 테스트 성공
 - [ ] 챗봇 질의응답 테스트 성공
 - [ ] 세션 관리 테스트 성공 (후속 질문)
+- [ ] 버전 관리 테스트 성공 (동일 파일 재업로드) ⭐ NEW
 - [ ] 평균 응답 시간 10초 이하
 
 ---
